@@ -55,12 +55,14 @@ void ScanBootSector()
 	bdptor.FATs = buf[0x10];
 	bdptor.RootDirEntries = RevByte(buf[0x11],buf[0x12]);    
 	bdptor.LogicSectors = RevByte(buf[0x13],buf[0x14]);
+	if (bdptor.LogicSectors == 0)
+		bdptor.LogicSectors = RevWord(buf[0x20],buf[0x21],buf[0x22],buf[0x23]);
 	bdptor.MediaType = buf[0x15];
 	bdptor.SectorsPerFAT = RevByte( buf[0x16],buf[0x17] );
 	bdptor.SectorsPerTrack = RevByte(buf[0x18],buf[0x19]);
 	bdptor.Heads = RevByte(buf[0x1a],buf[0x1b]);
 	bdptor.HiddenSectors = RevByte(buf[0x1c],buf[0x1d]);
-    ROOTDIR_OFFSET = bdptor.BytesPerSector + bdptor.FATs * bdptor.SectorsPerFAT * bdptor.BytesPerSector;
+	ROOTDIR_OFFSET = bdptor.BytesPerSector + bdptor.FATs * bdptor.SectorsPerFAT * bdptor.BytesPerSector;
 	
 	printf("Oem_name \t\t%s\n"
 		"BytesPerSector \t\t%d\n"
@@ -74,7 +76,7 @@ void ScanBootSector()
 		"SectorPerTrack \t\t%d\n"
 		"Heads \t\t\t%d\n"
 		"HiddenSectors \t\t%d\n"
-        "ROOTDIR_OFFSET \t\t%d\n",
+		"ROOTDIR_OFFSET \t\t%d\n",
 		bdptor.Oem_name,
 		bdptor.BytesPerSector,
 		bdptor.SectorsPerCluster,
@@ -87,7 +89,7 @@ void ScanBootSector()
 		bdptor.SectorsPerTrack,
 		bdptor.Heads,
 		bdptor.HiddenSectors,
-        ROOTDIR_OFFSET);
+		ROOTDIR_OFFSET);
 }
 
 /*日期*/
@@ -172,7 +174,7 @@ int GetEntry(struct Entry *pentry)
 		info[0]=buf[22];
 		info[1]=buf[23];
 		findTime(&(pentry->hour),&(pentry->min),&(pentry->sec),info);  
-
+								
 		info[0]=buf[24];
 		info[1]=buf[25];
 		findDate(&(pentry->year),&(pentry->month),&(pentry->day),info);
@@ -225,7 +227,7 @@ int fd_ls()
 			if(ret > 0)
 			{
 				printf("%12s\t"
-					"%d:%d:%d\t"
+					"%d-%d-%d\t"
 					"%d:%d:%d   \t"
 					"%d\t"
 					"%d\t\t"
@@ -256,7 +258,7 @@ int fd_ls()
 			if(ret > 0)
 			{
 				printf("%12s\t"
-					"%d:%d:%d\t"
+					"%d-%d-%d\t"
 					"%d:%d:%d   \t"
 					"%d\t"
 					"%d\t\t"
