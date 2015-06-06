@@ -12,8 +12,9 @@
 #define CLUSTER_SIZE 512*4                         
 #define FAT_ONE_OFFSET 512                       
 #define FAT_TWO_OFFSET 512+64*512                       
-#define DATA_OFFSET 512+2*64*512+512*32        
+int FAT_OFFSET[] = {-1, -1, -1};
 int ROOTDIR_OFFSET = -1;
+int DATA_OFFSET = -1;
            
 
 /*属性位掩码*/
@@ -53,8 +54,8 @@ struct BootDescriptor_t{
 struct Entry{
 	unsigned char short_name[12];   /*字节0-10，11字节的短文件名*/
 	unsigned char long_name[27];    /*未使用，26字节的长文件名*/
-	unsigned short year,month,day;  /*22-23字节*/
-	unsigned short hour,min,sec;    /*24-25字节*/
+	unsigned short hour,min,sec;    /*22-23字节*/
+	unsigned short year,month,day;  /*24-25字节*/
 	unsigned short FirstCluster;    /*26-27字节*/
 	unsigned int size;              /*28-31字节*/
 	/*属性值                        11字节
@@ -102,7 +103,7 @@ struct Entry *curdir = NULL;//当前所在的目录，默认NULL表示位于根�
 int dirno = 0;/*代表目录的层数*/
 struct Entry* fatherdir[10];
 
-unsigned char fatbuf[512*250];  
+unsigned char fatbuf[512*64];  
 
 #endif
 
