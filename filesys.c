@@ -707,9 +707,195 @@ int fd_cf(char *filename,int size)
 	return 1;
 }
 
+/*
+*参数：dirname，类型：char，创建文件的名称
+*返回值：1，成功；-1，失败
+*功能：在当前目录下创建子目录
+*/
+int fd_mkdir(char *dirname)
+{
+	struct Entry *pentry;
+	int ret,i=0,cluster_addr,offset;
+	unsigned short cluster,clusterno,date = 0,ttime = 0;
+	unsigned char c[DIR_ENTRY_SIZE];
+	int index;
+	unsigned char buf[DIR_ENTRY_SIZE];
+	time_t t;
+	struct tm *ct;
+	pentry = (struct Entry*)malloc(sizeof(struct Entry));
+
+	t = time(NULL);
+	ct = localtime(&t);
+	date = ((ct->tm_year - 80) << 9) + ((ct->tm_mon + 1) << 5) + ct->tm_mday;
+	ttime = (ct->tm_hour << 11) + (ct->tm_min << 5) + (ct->tm_sec >> 1);
+
+	//扫描当前目录下，是否已存在该目录名
+	ret = ScanEntry(dirname,pentry,1);
+	if (ret>=0)
+	{
+		printf("This dirname is exist\n");
+		free(pentry);
+		return -1;
+	}
+
+	/*查询fat表，找到空白簇，保存在clusterno中*/
+	for(cluster=2;cluster<1000;cluster++)
+	{
+		index = cluster *2;
+		if(fatbuf[index]==0x00&&fatbuf[index+1]==0x00)
+		{
+			clusterno = cluster;
+			break;
+		}
+
+	}
+	index = clusterno*2;
+	fatbuf[index] = 0xff;
+	fatbuf[index+1] = 0xff;
+
+	if(curdir==NULL)  /*往根目录下写文件*/
+	{ 
+		if((ret= lseek(fd,ROOTDIR_OFFSET,SEEK_SET))<0)
+			perror("lseek ROOTDIR_OFFSET failed");
+		offset = ROOTDIR_OFFSET;
+		while(offset < DATA_OFFSET)
+		{
+			//读取一个条目
+			if((ret = read(fd,buf,DIR_ENTRY_SIZE))<0)
+				perror("read entry failed");
+
+			offset += abs(ret);
+			//看看条目是否可用（e5）或者是不是表示后面没有更多条目（00）
+			if(buf[0]==0xe5||buf[0]==0x00)
+			{       
+				offset = offset-abs(ret);     
+				for(i=0;i<=strlen(dirname);i++)
+				{
+					c[i]=toupper(dirname[i]);
+				}			
+				for(;i<=10;i++)
+					c[i]=' ';
+
+				c[11] = 0x10;
+				/*写入时间和日期*/
+				c[22] = (ttime & 0x00ff);
+				c[23] = ((ttime & 0xff00)>>8);
+				c[24] = (date & 0x00ff);
+				c[25] = ((date & 0xff00)>>8);
+
+				/*写第一簇的值*/
+				c[26] = (clusterno &  0x00ff);
+				c[27] = ((clusterno & 0xff00)>>8);
+
+				/*写文件的大小*/
+				c[28] = 0;
+				c[29] = 0;
+				c[30] = 0;
+				c[31] = 0;
+
+				/*还有很多内容并没有写入，大家请自己补充*/
+				/*而且这里还有个问题，就是对于目录表项的值为00的情况处理的不好*/
+				if(lseek(fd,offset,SEEK_SET)<0)
+					perror("lseek fd_cf failed");
+				if(write(fd,&c,DIR_ENTRY_SIZE)<0)
+					perror("write failed");
+
+				/*在本目录下写入.目录*/
+				cluster_addr = DATA_OFFSET + (clusterno - 2)*CLUSTER_SIZE;
+				c[0] = '.';			
+				for(i=1;i<=10;i++) c[i]=' ';
+				if(lseek(fd,cluster_addr,SEEK_SET)<0)
+					perror("lseek cluster_addr failed");
+				if(write(fd,&c,DIR_ENTRY_SIZE)<0)
+					perror("write failed");
+				/*在本目录下写入..目录*/
+				c[0] = c[1] = '.';			
+				for(i=2;i<=10;i++) c[i]=' ';
+				c[26] = c[27] = 0;
+				if(write(fd,&c,DIR_ENTRY_SIZE)<0)
+					perror("write failed");
+
+				free(pentry);
+				if(WriteFat()<0)
+					exit(1);
+
+				return 1;
+			}
+		}
+	}
+	else 
+	{
+		//子目录的情况与根目录类似
+		cluster_addr = (curdir->FirstCluster - 2)*CLUSTER_SIZE + DATA_OFFSET;
+		if((ret= lseek(fd,cluster_addr,SEEK_SET))<0)
+			perror("lseek cluster_addr failed");
+		offset = cluster_addr;
+		while(offset < cluster_addr + CLUSTER_SIZE)
+		{
+			if((ret = read(fd,buf,DIR_ENTRY_SIZE))<0)
+				perror("read entry failed");
+
+			offset += abs(ret);
+
+			if(buf[0]==0xe5||buf[0]==0x00)
+			{ 
+				offset = offset - abs(ret);      
+				for(i=0;i<=strlen(dirname);i++)
+				{
+					c[i]=toupper(dirname[i]);
+				}
+				for(;i<=10;i++)
+					c[i]=' ';
+
+				c[11] = 0x10;
+
+				c[22] = (ttime & 0x00ff);
+				c[23] = ((ttime & 0xff00)>>8);
+				c[24] = (date & 0x00ff);
+				c[25] = ((date & 0xff00)>>8);
+
+				c[26] = (clusterno &  0x00ff);
+				c[27] = ((clusterno & 0xff00)>>8);
+
+				c[28] = 0;
+				c[29] = 0;
+				c[30] = 0;
+				c[31] = 0;
+
+				if(lseek(fd,offset,SEEK_SET)<0)
+					perror("lseek fd_cf failed");
+				if(write(fd,&c,DIR_ENTRY_SIZE)<0)
+					perror("write failed");
+
+				/*在本目录下写入.目录*/
+				cluster_addr = DATA_OFFSET + (clusterno - 2)*CLUSTER_SIZE;
+				c[0] = '.';			
+				for(i=1;i<=10;i++) c[i]=' ';
+				if(lseek(fd,cluster_addr,SEEK_SET)<0)
+					perror("lseek cluster_addr failed");
+				if(write(fd,&c,DIR_ENTRY_SIZE)<0)
+					perror("write failed");
+				/*在本目录下写入..目录*/
+				c[0] = c[1] = '.';			
+				for(i=2;i<=10;i++) c[i]=' ';
+				c[26] = c[27] = 0;
+				if(write(fd,&c,DIR_ENTRY_SIZE)<0)
+					perror("write failed");
+
+				free(pentry);
+				if(WriteFat()<0)
+					exit(1);
+
+				return 1;
+			}
+
+		}
+	}
+	return 1;
+}
 void do_usage()
 {
-	printf("please input a command, including followings:\n\tls\t\t\tlist all files\n\tcd <dir>\t\tchange direcotry\n\tcf <filename> <size>\tcreate a file\n\tdf <file>\t\tdelete a file\n\texit\t\t\texit this system\n");
+	printf("please input a command, including followings:\n\tls\t\t\tlist all files\n\tcd <dir>\t\tchange direcotry\n\tcf <filename> <size>\tcreate a file\n\tdf <file>\t\tdelete a file\n\tmkdir <dir>\t\tcreate a dir\n\texit\t\t\texit this system\n");
 }
 
 
@@ -749,6 +935,11 @@ int main()
 			scanf("%s", input);
 			size = atoi(input);
 			fd_cf(name,size);
+		}
+		else if(strcmp(input, "mkdir") == 0)
+		{
+			scanf("%s", name);
+			fd_mkdir(name);
 		}
 		else
 			do_usage();
