@@ -337,35 +337,51 @@ int ScanEntry (char *entryname,struct Entry *pentry,int mode)
 int fd_cd(char *dir)
 {
 	struct Entry *pentry;
-	int ret;
-
-	if(!strcmp(dir,"."))
+	int ret, i;
+	char *c , bak[1000]={0};
+	bak[0] = '/';
+	for (i = 2; i <= dirno; i++)
 	{
-		return 1;
+		strcat(bak, fatherdir[i]->short_name);
+		strcat(bak, "/");
 	}
-	if(!strcmp(dir,"..") && curdir==NULL)
-		return 1;
-	/*返回上一级目录*/
-	if(!strcmp(dir,"..") && curdir!=NULL)
+	if (curdir != NULL) strcat(bak, curdir->short_name);
+	if (strchr(dir,'/') == dir)
 	{
-	  //fatherdir 用于保存父目录信息。
-		curdir = fatherdir[dirno];
-		dirno--; 
-		return 1;
+		curdir = NULL;
+		dirno = 0;
+		dir++;
 	}
-	//注意此处有内存泄露
-	pentry = (struct Entry*)malloc(sizeof(struct Entry));
-	
-	ret = ScanEntry(dir,pentry,1);
-	if(ret < 0)
+	while (dir != '\0')
 	{
-		printf("no such dir\n");
-		free(pentry);
-		return -1;
+        	if ((c = strchr(dir,'/')) != NULL)
+			*c = '\0';
+		if(!strcmp(dir,"."))
+			;
+		else if(!strcmp(dir,"..") && curdir==NULL)
+			;
+		else if(!strcmp(dir,"..") && curdir!=NULL)
+		{
+			free(curdir);
+			curdir = fatherdir[dirno--];			
+		}
+		else 
+		{
+			pentry = (struct Entry*)malloc(sizeof(struct Entry));
+			ret = ScanEntry(dir,pentry,1);
+			if(ret < 0)
+			{
+				printf("no such dir\n");
+				free(pentry);
+				fd_cd(bak);
+				return -1;
+			}
+			fatherdir[++dirno] = curdir;
+			curdir = pentry;
+		}
+		if (c != NULL) dir = c + 1;
+		else break;
 	}
-	dirno ++;
-	fatherdir[dirno] = curdir;
-	curdir = pentry;
 	return 1;
 }
 
