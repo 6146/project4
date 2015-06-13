@@ -707,6 +707,7 @@ int fd_cf(char *filename,int size)
 	return 1;
 }
 
+
 /*
 *参数：dirname，类型：char，创建文件的名称
 *返回值：1，成功；-1，失败
@@ -893,9 +894,83 @@ int fd_mkdir(char *dirname)
 	}
 	return 1;
 }
+
+
+/*
+*参数：dirname，类型：char
+*返回值：1，成功；-1，失败
+*功能;删除当前目录下的子目录
+*/
+int fd_rmdir(char *dirname)
+{
+	struct Entry *pentry;
+	int ret, ret1, cluster_addr, offset;
+	unsigned char c, buf[DIR_ENTRY_SIZE];
+
+	if(strcmp(dirname, ".") == 0 || strcmp(dirname, "..") == 0)
+	{
+		printf("can't remove . or ..\n");
+		return -1;
+	}
+
+	pentry = (struct Entry*)malloc(sizeof(struct Entry));
+
+	/*扫描当前目录查找文件*/
+	ret = ScanEntry(dirname,pentry,1);
+	if(ret<0)
+	{
+		printf("no such dir\n");
+		free(pentry);
+		return -1;
+	}
+
+	cluster_addr = offset = (pentry->FirstCluster - 2)*CLUSTER_SIZE + DATA_OFFSET;
+	if(lseek(fd,cluster_addr + 2 * DIR_ENTRY_SIZE,SEEK_SET)<0)
+		perror("lseek cluster_addr failed");
+	while(offset < cluster_addr + CLUSTER_SIZE)
+	{
+		if((ret1 = read(fd,buf,DIR_ENTRY_SIZE))<0)
+			perror("read entry failed");
+		offset += abs(ret1);
+		if (buf[0] == 0x00) break;
+		if (buf[0]!=0xe5)
+		{
+			printf("Dir has files\n");
+			free(pentry);
+			return -1;
+		}
+	}
+	/*清除fat表项*/
+	if (pentry->FirstCluster != 0) ClearFatCluster(pentry->FirstCluster);
+
+	/*清除目录表项*/
+	c=0xe5;//e5表示该目录项可用
+
+	//现将文件指针定位到目录处，0x20等价于32，因为每条目录表项32bytes
+	if(lseek(fd,ret-0x20,SEEK_SET)<0)
+		perror("lseek fd_df failed");
+	//标记目录表项可用
+	if(write(fd,&c,1)<0)
+		perror("write failed");  
+
+	/*
+        这段话在源程序中存在，但助教感觉这句话是错的。。。o(╯□╰)o
+        如果发现助教的感觉错了赶紧告诉助教，有加分！！
+	if(lseek(fd,ret-0x40,SEEK_SET)<0)
+		perror("lseek fd_df failed");
+	if(write(fd,&c,1)<0)
+	perror("write failed");*/
+
+	free(pentry);
+	if(WriteFat()<0)
+		exit(1);
+	return 1;
+}
+
+
 void do_usage()
 {
-	printf("please input a command, including followings:\n\tls\t\t\tlist all files\n\tcd <dir>\t\tchange direcotry\n\tcf <filename> <size>\tcreate a file\n\tdf <file>\t\tdelete a file\n\tmkdir <dir>\t\tcreate a dir\n\texit\t\t\texit this system\n");
+	printf("please input a command, including followings:\n\tls\t\t\tlist all files\n\tcd <dir>\t\tchange direcotry\n\tcf <filename> <size>\tcreate a file\n\tdf <file>\t\tdelete a file\n\tmkdir <dir>\t\tcreate a dir\n\trmdir <dir>\t\tremove a dir\n\texit\t\t\texit this system\n");
 }
 
 
@@ -940,6 +1015,11 @@ int main()
 		{
 			scanf("%s", name);
 			fd_mkdir(name);
+		}
+		else if(strcmp(input, "rmdir") == 0)
+		{
+			scanf("%s", name);
+			fd_rmdir(name);
 		}
 		else
 			do_usage();
