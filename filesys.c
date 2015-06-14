@@ -352,7 +352,7 @@ int fd_cd(char *dir)
 		dirno = 0;
 		dir++;
 	}
-	while (dir != '\0')
+	while (*dir != '\0')
 	{
         	if ((c = strchr(dir,'/')) != NULL)
 			*c = '\0';
